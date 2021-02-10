@@ -20,7 +20,7 @@ import sys
 #####
 
 # find the most recently created folder
-path = "C:\\Users\\Firelab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\air_experiments"
+path = "C:\\Users\\Firelab\\Desktop\\Simon\\FeedbackControl_TemperatureExperiments\\air_experiments"
 all_folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
 
 folder_creation_time = 0
@@ -49,11 +49,11 @@ fig1, ax1 = plt.subplots(1,1, constrained_layout = True)
 
 # format the plots
 for a,ax in enumerate(axes0):
-	ax.set_ylabel(["IHF [kW]", "MLR [g/m2s]"][a], fontsize = fontsize_labels)
+	ax.set_ylabel(["IHF [kW/m2]", "NHF [kW/m2]"][a], fontsize = fontsize_labels)
 	ax.set_xlabel("Time [s]", fontsize = fontsize_labels)
 	ax.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
-	ax.set_ylim([[-5,70],[-0.5,12.5]][a])
-	ax.set_yticks([np.linspace(0,70,8), np.linspace(0,12,13)][a])
+	ax.set_ylim([[-5,70],[-2.5, 35]][a])
+	ax.set_yticks([np.linspace(0,70,8), np.linspace(0,35,8)][a])
 	ax.set_xlim([0,1200])
 	ax.set_xticks(np.linspace(0,1200,13))
 ax1.set_ylabel("PID terms [-]", fontsize = fontsize_labels)
@@ -66,12 +66,8 @@ ax1.set_xticks(np.linspace(0,1200,13))
 
 # add lines and legend for plots in figure 0
 ihf_line, = axes0[0].plot([],[], color = "maroon", alpha = 0.75, linewidth = 2)
-mlr_line, = axes0[1].plot([],[], color = "gray", alpha = 0.75, marker = "o", 
-	label = "mlr", linestyle = "")
-mlr_movingaverage_line, = axes0[1].plot([],[], color = "maroon", alpha = 0.75, 
-	linewidth = 2,
-	label = "mlr_moving_average")
-axes0[1].legend(fancybox = True, loc = "upper left", fontsize = fontsize_legend)
+nhf_line, = axes0[1].plot([],[], color = "maroon", alpha = 0.75, 
+						linewidth = 2)
 
 # add legend for PID coefficients plot in figure 1
 list_PIDterms_plots = []
@@ -113,8 +109,8 @@ while True:
 			# extract the data
 			time_array = all_data["time"]
 			ihf = all_data["IHF"]
-			mlr = all_data["mlr"]
-			mlr_moving_average = all_data["mlr_moving_average"]
+			nhf = all_data["nhf"]
+
 			time_step = all_data["time_step"]
 			PID_prop = all_data["PID_proportional"]
 			PID_integral = all_data["PID_integral"]
@@ -123,10 +119,8 @@ while True:
 			# modify plots in figure 0
 			ihf_line.set_data([time_array[:time_step]],
 				[ihf[:time_step]])
-			mlr_line.set_data(time_array[:time_step],
-				mlr[:time_step])
-			mlr_movingaverage_line.set_data(time_array[:time_step],
-				mlr_moving_average[:time_step])
+			nhf_line.set_data(time_array[:time_step],
+				nhf[:time_step]/1000)
 
 			# modify plots in figure 1
 			for l, line in enumerate(list_PIDterms_plots):

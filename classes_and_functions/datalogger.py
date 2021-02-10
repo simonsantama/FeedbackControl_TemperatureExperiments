@@ -82,6 +82,25 @@ class DataLogger():
             ':MEASure:TEMPerature? %s,%s,(%s)' % (
                 'TCouple', 'K', '@112,113'))
 
+        return (response, response_TCs)
 
-        return response, response_TCs
+    def query_data_for_sampletemperatures(my_instrument):
+        """
+        This function queries the voltages and temperatures needed
+        to calculate the HRR
         
+        Returns:
+        -------
+        response: list
+            list of [T4, T8, T12, T16]
+        
+        """
+        my_instrument.write(':FORMat:READing:CHANnel %d' % (1))
+        my_instrument.write(':FORMat:READing:ALARm %d' % (1))
+        my_instrument.write(':FORMat:READing:UNIT %d' % (1))
+        my_instrument.write(':FORMat:READing:TIME:TYPE %s' % ('REL'))
+        response = my_instrument.query(
+            ':MEASure:TEMPerature? %s,%s,(%s)' % (
+                'TCouple', 'K', '@202:205'))
+
+        return response       
