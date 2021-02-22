@@ -66,8 +66,12 @@ ax1.set_xticks(np.linspace(0,1200,13))
 
 # add lines and legend for plots in figure 0
 ihf_line, = axes0[0].plot([],[], color = "maroon", alpha = 0.75, linewidth = 2)
-nhf_line, = axes0[1].plot([],[], color = "maroon", alpha = 0.75, 
-						linewidth = 2)
+nhf_line, = axes0[1].plot([],[], color = "maroon", alpha = 0.75, linewidth=2,
+	label="NHF fit")
+nhf_surface_line, = axes0[1].plot([],[], color = "dodgerblue", alpha = 0.75, linewidth=2,
+	label="NHF surface losses")
+nhf_mean_line, = axes0[1].plot([],[], color = "black", alpha = 0.75, linewidth=2,
+	label="NHF mean")
 
 # add legend for PID coefficients plot in figure 1
 list_PIDterms_plots = []
@@ -109,7 +113,9 @@ while True:
 			# extract the data
 			time_array = all_data["time"]
 			ihf = all_data["IHF"]
-			nhf = all_data["nhf"]
+			nhf_fit = all_data["nhf_fit"]
+			nhf_surface = all_data["nhf_surface"]
+			nhf_mean = all_data["nhf_mean"]
 
 			time_step = all_data["time_step"]
 			PID_prop = all_data["PID_proportional"]
@@ -120,7 +126,11 @@ while True:
 			ihf_line.set_data([time_array[:time_step]],
 				[ihf[:time_step]])
 			nhf_line.set_data(time_array[:time_step],
-				nhf[:time_step]/1000)
+				nhf[:time_step])
+			nhf_surface_line.set_data(time_array[:time_step],
+				nhf_surface[:time_step])
+			nhf_mean_line.set_data(time_array[:time_step],
+				nhf_mean[:time_step])
 
 			# modify plots in figure 1
 			for l, line in enumerate(list_PIDterms_plots):
@@ -128,14 +138,14 @@ while True:
 					[PID_prop, PID_integral, PID_dev][l][:time_step])
 
 			# pause the figure
-			plt.pause(0.5)
+			plt.pause(1)
 
 
 
 	except Exception as e:
 		# print(f"\nError when loading pickle or plotting data\n")
 		# print(e)
-		time.sleep(0.5)
+		time.sleep(1)
 
 
 	if msvcrt.kbhit():

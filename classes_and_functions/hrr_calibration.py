@@ -119,7 +119,7 @@ all_coeff_data = pd.DataFrame(data = data)
 
 
 # save data into calibration data file
-address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\hrr_calibration_data"
+address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_TemperatureExperiments\\hrr_calibration_data"
 name_file = f"{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.xlsx"
 address_file = os.path.join(address_folder, name_file)
 

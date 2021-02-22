@@ -19,7 +19,7 @@ from pandas import ExcelWriter
 
 
 # add path to import functions and classes (absolute path on the FPA's computer)
-sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\classes_and_functions")
+sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_TemperatureExperiments\\classes_and_functions")
 from datalogger import DataLogger
 
 
@@ -143,7 +143,7 @@ all_data.loc[:, "polyfit_voltage_to_heatflux"] = np.polyval(
 	coeff_voltage_to_heatflux, all_data.loc[:, "output_voltage_tolamps"])
 
 # save data into calibration data file
-address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\calibration_data"
+address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_TemperatureExperiments\\calibration_data"
 name_file = f"{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.xlsx"
 address_file = os.path.join(address_folder, name_file)
 

@@ -1,14 +1,14 @@
 """
 FPA experiments
 This algorithm uses a PID to control the IHF from the FPA's lamps so 
-that the sample absorbs a constant rate of energy
+that the sample absorbs a constant rate of energy after the pyrolysis
+temperature is reached
 
 Experimental procedure:
 1. Lamps follow a linear heating ramp, with lambda 
 (irradiation rate) = 0.25 kW/m^2 for at least 250 seconds and
- until the mlr is within 20% of the desired value.
-2. Once the nhf is within the desired value, the control of the lamps is 
-passed to the PID controller, until the test is ended.
+ until the surface temperature surpasses the pyrolysis temperautre
+2. The nhf is then maintained at the desired value by the PID controller
 
 This file can be greatly improved by re-factoring it and using an OOP approach.
 Dirty implementation but it works and it is what was needed.
@@ -87,9 +87,9 @@ else:
 
 
 
-#####
+####
 # INITIALIZE USEFUL PARAMETERS AND START TEST
-#####
+####
 
 print("Starting test")
 
@@ -99,9 +99,7 @@ time_logging_period = 0.1    # s
 surface_area = 0.09*0.09     # m2
 irradiation_rate = 0.25      # kWm-2s-1
 conductivity = 0.19          # W/mK
-
-# epsilon is percentage of mlr_desired used to forcefully reduce oscillations
-epsilon = 0.2   # %
+h_total = 28
 
 # FPA lamps
 max_lamp_voltage = 4.5
@@ -124,11 +122,14 @@ APT_volts = np.zeros_like(t_array)
 o2_inlet_volts = np.zeros_like(t_array)
 rh_volts = np.zeros_like(t_array)
 
+TS = np.zeros_like(t_array)
 T4 = np.zeros_like(t_array)
 T8 = np.zeros_like(t_array)
 T12 = np.zeros_like(t_array)
 T16 = np.zeros_like(t_array)
 nhf = np.zeros_like(t_array)
+nhf_surfacelosses = np.zeros_like(t_array)
+nhf_mean = np.zeros_like(t_array)
 IHF = np.zeros_like(t_array)
 
 o2_percentage = np.zeros_like(t_array)
@@ -141,22 +142,26 @@ Ambient_TC_K = np.zeros_like(t_array)
 
 # PID
 PID_state = "not_active"
-PID_kp = 0.2
-PID_ki = 0.04
-PID_kd = 0.2
+PID_kp = 0.04
+PID_ki = 0.008
+PID_kd = 0.04
 PID_integral_term_array = np.zeros_like(t_array)
 PID_proportional_term_array = np.zeros_like(t_array)
 PID_derivative_term_array = np.zeros_like(t_array)
+surface_temperature_activation = 573
 
 # open csv file to write data
 with open(full_name_of_file, "w", newline = "") as handle:
 	writer = csv.writer(handle)
-	writer.writerows([['time_seconds', 
+	writer.writerows([['time_seconds',
+		"TSurface_K",
 		"T4_K",
 		"T8_K",
 		"T12_K",
 		"T16_K",
-		"NHF_kwm-2", 
+		"NHF_kwm-2",
+		"NHF_surfacelosses_kwm-2",
+		"NHF_mean_kWm-2",
 		"IHF_volts", 
 		"IHF_kwm-2", 
 		"Observations", 
@@ -200,8 +205,14 @@ with open(full_name_of_file, "w", newline = "") as handle:
 			# calculate nhf using quadratic fit
 			coefficients = np.polyfit([0.004, 0.008, 0.012, 0.016],
 				[T4[time_step], T8[time_step], T12[time_step], T16[time_step]], 2)
-			nhf[time_step] = 0
-			# nhf[time_step] = - conductivity * coefficients[1]
+			polynomial = np.poly1d(coefficients)
+			initial_temperature = np.array([T4[time_step], T8[time_step],
+				T12[time_step], T16[time_step]]).mean()
+			surface_temperature = polynomial(0)
+			surface_losses = (h_total * (surface_temperature - initial_temperature))/1000
+			nhf[time_step] = - (conductivity * coefficients[1]) / 1000
+			nhf_surfacelosses[time_step] = IHF[time_step - 1] - surface_losses
+			nhf_mean[time_step] = (nhf[time_step] + nhf_surfacelosses[time_step])/2
 
 			# read HRR associated data from the logger
 			response_volts, response_temperatures = DataLogger.query_data_for_HRR(
@@ -213,7 +224,6 @@ with open(full_name_of_file, "w", newline = "") as handle:
 			APT_volts[time_step] = response_volts[4]
 			o2_inlet_volts[time_step] = response_volts[5]
 			rh_volts[time_step] = response_volts[6]
-
 			Duct_TC_K[time_step] = float(response_temperatures.split(",")[0])
 			Ambient_TC_K[time_step] = float(response_temperatures.split(",")[1])
 
@@ -233,11 +243,14 @@ with open(full_name_of_file, "w", newline = "") as handle:
 			else:
 				message = ""
 			writer.writerows([[t_array[time_step],
+				TS[time_step],
 				T4[time_step],
 				T8[time_step],
 				T12[time_step],
 				T16[time_step],
-				nhf[time_step]/1000,
+				nhf[time_step],
+				nhf_surfacelosses[time_step],
+				nhf_mean[time_step],
 				IHF_volts[time_step],
 				IHF[time_step],
 				message,
@@ -279,23 +292,28 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				continue
 			else:
 
-				# record time for this reading
-				t_array[time_step] = time.time() - time_start_logging
-
-				# query temperatures and cal
+				t_array[time_step] = time.time() - time_start_logging			
 				response_sample_temperatures = DataLogger.query_data_for_sampletemperatures(
 					logger)		
 				T4[time_step] = float(response_sample_temperatures.split(",")[0]) + 273
 				T8[time_step] = float(response_sample_temperatures.split(",")[1]) + 273
 				T12[time_step] = float(response_sample_temperatures.split(",")[2]) + 273
 				T16[time_step] = float(response_sample_temperatures.split(",")[3]) + 273
-				
+
 				# calculate nhf using quadratic fit
 				coefficients = np.polyfit([0.004, 0.008, 0.012, 0.016],
 					[T4[time_step], T8[time_step], T12[time_step], T16[time_step]], 2)
-				nhf[time_step] = - conductivity * coefficients[1]
-				surface_temperature = coefficients[2]
-				nhf_alt = IHF[time_step] - (28 * (surface_temperature - 288))/1000
+				polynomial = np.poly1d(coefficients)
+				initial_temperature = np.array([T4[time_step], T8[time_step],
+					T12[time_step], T16[time_step]]).mean()
+				surface_temperature = polynomial(0)
+				TS[time_step] = surface_temperature
+				surface_losses = (h_total * (surface_temperature - initial_temperature))/1000
+				nhf[time_step] = - (conductivity * coefficients[1]) / 1000
+				nhf_surfacelosses[time_step] = IHF[time_step] - surface_losses
+				
+				nhf_mean[time_step] = (nhf[time_step] + nhf_surfacelosses[time_step])/2
+				input_nhf = nhf_mean[time_step]
 
 				# read HRR associated data from the logger
 				response_volts, response_temperatures = DataLogger.query_data_for_HRR(
@@ -307,7 +325,6 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				APT_volts[time_step] = response_volts[4]
 				o2_inlet_volts[time_step] = response_volts[5]
 				rh_volts[time_step] = response_volts[6]
-
 				Duct_TC_K[time_step] = float(response_temperatures.split(",")[0])
 				Ambient_TC_K[time_step] = float(response_temperatures.split(",")[1])
 
@@ -321,7 +338,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				co2_ppm[time_step] = np.polyval(
 					list(coeff_hrr[3]), co2_volts[time_step])
 
-				# start with a ramped IHF, and once mlr reaches 0.8*mlr_desired, activate PID
+				# start with a ramped IHF, and once mlr reaches surface temperature, activate PID
 				if PID_state == "not_active":
 					IHF[time_step+1] = (t_array[time_step] - 
 						t_array[time_step_lastpretest]) * irradiation_rate
@@ -336,7 +353,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 						IHF[time_step+1] = np.polyval(
 							coeff_voltstohf, IHF_volts[time_step+1])
 
-					if (nhf[time_step] > 0.95 * nhf_desired * 1000) and (
+					if (surface_temperature > surface_temperature_activation ) and (
 						time.time() - time_start_test > 100):
 						PID_state = "active"
 						print("\n-----")
@@ -345,8 +362,8 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 						# set pid parameters
 						previous_pid_time = time.time()
-						last_error = nhf_desired - nhf[time_step]
-						last_input = nhf[time_step]
+						last_error = nhf_desired - nhf_mean[time_step]
+						last_input = nhf_surfacelosses[time_step]
 						pid_integral_term = voltage_output
 						pid_proportional_term = 0
 						pid_derivative_term = 0
@@ -354,7 +371,6 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 				# call PID
 				elif PID_state == "active":
-					pass
 					voltage_output, previous_pid_time, last_error, pid_proportional_term, \
 					pid_integral_term, pid_derivative_term = \
 											PID(
@@ -365,7 +381,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 					IHF_volts[time_step+1] = voltage_output
 					IHF[time_step+1] = np.polyval(
 						coeff_voltstohf, IHF_volts[time_step+1])
-					last_input = nhf[time_step]
+					last_input = nhf_surfacelosses[time_step]
 
 					PID_proportional_term_array[time_step] = pid_proportional_term
 					PID_integral_term_array[time_step] = pid_integral_term
@@ -381,11 +397,14 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				else:
 					message = ""
 				writer.writerows([[t_array[time_step],
+					TS[time_step],
 					T4[time_step],
 					T8[time_step],
 					T12[time_step],
 					T16[time_step],
-					nhf[time_step]/1000,
+					nhf[time_step],
+					nhf_surfacelosses[time_step],
+					nhf_mean[time_step],
 					IHF_volts[time_step],
 					IHF[time_step],
 					message,
@@ -404,11 +423,14 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				data_for_pickle = {"time":t_array,
 									"IHF": IHF,
 									"IHF_volts": IHF,
+									"TS": TS,
 									"T4": T4,
 									"T8": T8,
 									"T12": T12,
 									"T16": T16,
-									"nhf": nhf,
+									"nhf_fit": nhf,
+									"nhf_surface": nhf_surfacelosses,
+									"nhf_mean": nhf_mean,
 									"time_step": time_step,
 									"PID_proportional":PID_proportional_term_array,
 									"PID_integral": PID_integral_term_array,
@@ -432,13 +454,17 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 				# print the result of this iteration to the terminal window
 				print(f"\nPID state: {PID_state}")
-				print(f"time:{np.round(time.time() - time_start_test,4)}")
-				print(f"IHF:{np.round(IHF[time_step+1],4)}")
-				print(f"nhf: {np.round(nhf[time_step]/1000, 4)}", nhf_alt/1000)
-				print(f"T4:{T4[time_step]}")
-				print(f"T8:{T8[time_step]}")
-				print(f"T12:{T12[time_step]}")
-				print(f"T16:{T16[time_step]}")
+				print(f"time:{np.round(time.time() - time_start_test,2)}")
+				print(f"IHF:{np.round(IHF[time_step+1],2)}")
+				print(f"NHF fit: {np.round(nhf[time_step], 2)}")
+				print(
+					f"NHF surface:{np.round(nhf_surfacelosses[time_step], 2)}")
+				print(f"surface_temperature: {surface_temperature}")
+				print(f"Tsurface: {np.round(TS[time_step], 2)}")
+				print(f"T4:{np.round(T4[time_step], 2)}")
+				print(f"T8:{np.round(T8[time_step], 2)}")
+				print(f"T12:{np.round(T12[time_step], 2)}")
+				print(f"T16:{np.round(T16[time_step], 2)}")
 
 				previous_log = time.time()
 				time_step += 1
@@ -455,8 +481,6 @@ with open(full_name_of_file, "w", newline = "") as handle:
 			exc_type, exc_obj, exc_tb = sys.exc_info()
 			fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
 			print(exc_type, fname, exc_tb.tb_lineno)
-			print(e)
-			print("- Logging continues -")
 
 			# end if ESC is pressed
 			if msvcrt.kbhit():
